@@ -1,0 +1,16 @@
+useDynLib(sscs)
+
+import(methods, Rcpp)
+importFrom(Rcpp, evalCpp)
+import(RcppEigen)
+
+export(init, run, run_scan, assignments)
+export(new_sscs, update_assignment, average_redundancy)
+export(plot_us_states_example)
+
+S3method(init, sscs)
+S3method(run, sscs)
+S3method(run_scan, sscs)
+S3method(assignments, sscs)
+S3method(summary, sscs)
+S3method(print, sscs)

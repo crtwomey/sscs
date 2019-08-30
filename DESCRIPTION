@@ -1,0 +1,13 @@
+Package: sscs
+Type: Package
+Title: Searching for structure in collective systems
+Version: 0.1
+Date: 2019-08-28
+Author: Colin Twomey
+Maintainer: Colin Twomey <crtwomey@gmail.com>
+Description: Finds the maximally compressible components of a system.
+License: GPL-3
+Depends: R (>= 3.5)
+Imports: Rcpp, methods, RcppEigen
+LinkingTo: Rcpp, RcppEigen
+LazyData: true
