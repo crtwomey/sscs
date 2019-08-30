@@ -13,11 +13,11 @@ reasons, so it was made the focus of this initial release.
 This R package requires Rcpp and RcppEigen (available from CRAN). To compile
 from the commandline, cd to the parent directory of the sscs repository and run
 
-'''console
+```console
 $ R CMD build sscs
 $ R CMD check sscs
 $ R CMD install sscs
-'''
+```
 
 ### Usage
 
@@ -28,7 +28,7 @@ the results are intuitive and easy to visualize.
 
 Univariate example using temperature alone:
 
-'''R
+```R
 # create a new 'sscs' S3 clustering object
 sscs <- new_sscs(US_state_temperature)
 
@@ -40,11 +40,11 @@ cl <- assignments(sscs)
 
 # convenience function using the 'maps' library for showing the result
 plot_us_states_example(cl)
-'''
+```
 
 Multivariate example combining temperature and precipitation:
 
-'''R
+```R
 # combine measurements
 X <- cbind(US_state_temperature, US_state_precipitation)
 
@@ -59,7 +59,7 @@ cl   <- assignments(sscs)
 
 # show the result
 plot_us_states_example(cl)
-'''
+```
 
 ### Credit
 
