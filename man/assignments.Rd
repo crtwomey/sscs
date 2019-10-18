@@ -2,6 +2,7 @@
 \alias{assignments}
 \title{ Gets cluster assignments. }
 \description{
+Returns an integer vector of cluster assignments.
 }
 \usage{
   assignment(sscs)

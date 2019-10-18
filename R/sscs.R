@@ -29,6 +29,8 @@ run_scan         <- function(object, ...) UseMethod('run_scan')
 run_scan.sscs    <- function(object, ...) run_scan_sscs(object, ...)
 assignments      <- function(object, ...) UseMethod('assignments')
 assignments.sscs <- function(object, ...) assignments_sscs(object)
+rescale          <- function(object, ...) UseMethod('rescale')
+rescale.sscs     <- function(object, ...) rescale_sscs(object, ...)
 
 # convenience for updating an S3 object with named variables in '...'
 revise.default <- function(object, ...) {
@@ -61,21 +63,82 @@ cluster_redundancy <- function(L, Hm) {
 }
 
 #
+#  Default quantization scale guarantees redundancy of total system
+#  is <= 1, and that Hm[i] >= 1. For comparing between systems, be
+#  be sure to use the same qscale for both systems.
+#
+default_quantization_scale <- function(Isystem, Hm) {
+	nj     <- length(Hm)
+	qscale <- 1/nj * (Isystem - sum(Hm))
+	qscale + max(0, 1 - min(Hm + qscale))
+}
+
+# change quantization scale for given sscs object
+rescale_sscs <- function(sscs, qscale=NA) {
+	Isystem <- sscs$Isystem
+	Hm      <- sscs$Hm
+
+	# use default quantization scale if none was provided
+	if (is.na(qscale)) qscale <- default_quantization_scale(
+		Isystem, Hm - sscs$qscale
+	)
+
+	# recalculate marginal entropies and system wide redundancy
+	Hm <- Hm - sscs$qscale + qscale
+	r  <- Isystem / sum(Hm)
+
+	# update cluster redundancies
+	clusters  <- sscs$clusters
+	nclusters <- length(clusters)
+
+	if (nclusters == 1) {
+		clusters[[1]]$d <- r
+	} else for (j in 1:nclusters) {
+		members <- clusters[[j]]$members
+		if (length(members) > 0) {
+			clusters[[j]]$d <- cluster_redundancy(
+				clusters[[j]]$L, Hm[members]
+			)
+		}
+	}
+
+	revise(sscs, Hm, r, qscale, clusters)
+}
+
+# place list of systems on a common scale
+common_scale <- function(systems, qscale=NA) {
+	# if no common scale is provided, use the maximum of the set
+	if (is.na(qscale)) {
+		qscales <- sapply(systems, function(sys) sys$qscale)
+		qscale  <- max(0, qscales[is.finite(qscales)])
+	}
+	lapply(systems, function(sscs) rescale(sscs, qscale))
+}
+
+#
 #  new_sscs
 #
 #  Create a new sscs object based on data matrix X.
 #
-#  X  : numeric matrix where rows are observations and columns are variates.
-#  js : integer vector with length equal to the number of columns of X,
-#       identifying multi-variate groupings of X's columns.
-#  pj : relative importance of each variable (multi-variate grouping).
-#       Currently does not affect hard clustering.
+#  X      : numeric matrix where rows are observations and columns
+#           are variates.
+#  js     : integer vector with length equal to the number of columns of X,
+#           identifying multi-variate groupings of X's columns.
+#  pj     : relative importance of each variable (multi-variate grouping).
+#           Currently does not affect hard clustering.
+#  qscale : quantization scale for differential entropy; default (NA) will
+#           calculate a scale that ensures all marginal entropies will
+#           be >= 1, and the redundancy of the system will be <= 1.
+#           Pass a pre-determined value for qscale for comparing redundancies
+#           between two or more systems. Comparisons only valid for the same
+#           choice of qscale.
 #
 #  returns a new sscs S3 object.
 #
 new_sscs <- function(X,
-	js = 1:ncol(X),
-	pj = rep(1/length(unique(js)), length(unique(js))))
+	js     = 1:ncol(X),
+	pj     = rep(1/length(unique(js)), length(unique(js))),
+	qscale = NA)
 {
 	nj <- length(unique(js))
 	nx <- ncol(X)
@@ -90,24 +153,42 @@ new_sscs <- function(X,
 	U <- gauss_transform(X)
 	K <- cov(U)
 
-	# correlation matrix
-	P  <- diag(diag(K)^(-0.5)) %*% K %*% diag(diag(K)^(-0.5))
+	# estimated correlation matrix
+	P <- diag(diag(K)^(-0.5)) %*% K %*% diag(diag(K)^(-0.5))
+
+	# ensure estimated correlation matrix is positive semi-definite
+	P <- as.matrix(Matrix::nearPD(P, corr=TRUE)$mat)
 
 	# gaussian total correlation
 	Ig <- function(A) -0.5*log_det(P[xj(A),xj(A)])
 
 	# gaussian joint entropy
 	tau <- 2*pi*exp(1)
-	Hg  <- function(A) 0.5*log_det(tau*K[xj(A),xj(A)])
+	Hg  <- function(A) 0.5*log_det(tau*cov(as.matrix(X[,xj(A)])))
 
 	# marginal entropies
 	Hm <- sapply(1:nj, Hg)
+
+	# system-wide total correlation
+	Isystem <- -0.5*log_det(P)
+
+	# compute default quantization scale if none provided
+	if (is.na(qscale)) {
+		qscale <- default_quantization_scale(Isystem, Hm)
+	}
+	Hm <- Hm + qscale
 
 	# updated by init_sscs
 	njhat    <- 1
 	pjhat_j  <- matrix(1, nj, njhat)
 	pjhat    <- c(1)
 	clusters <- list()
+
+	# initialize single cluster
+	r <- Isystem / sum(Hm)
+	clusters[[1]] <- list(
+		members=1:nj, L=NULL, d=r, class='cluster'
+	)
 
 	structure(list(
 		X        = X,        # matrix with columns for all variables
@@ -120,8 +201,10 @@ new_sscs <- function(X,
 		                     #   to columns in X
 		P        = P,        # correlation matrix
 		Ig       = Ig,       # computes gaussian multi-information
-		Hg       = Hg,       # computes gaussian entropy
+		Isystem  = Isystem,  # system-wide total correlation
 		Hm       = Hm,       # marginal gaussian entropy
+		r        = r,        # system-wide redundancy
+		qscale   = qscale,   # diff. entropy quantization scale
 		pjhat_j  = pjhat_j,  # assignments of variables to clusters
 		pjhat    = pjhat,    # weight of each cluster
 		clusters = clusters  # individual cluster quantities
@@ -185,21 +268,23 @@ init_sscs <- function(sscs,
 	Hm <- sscs$Hm
 
 	# initialize clusters
-	clusters <- vector('list', njhat)
-	if (njhat == 1) {
-		d <- Ig(1:nj) / sum(sscs$Hm)
-		clusters[[1]] <- list(
-			members=1:nj, L=NULL, d=d, class='cluster'
-		)
-	} else for (j in 1:njhat) {
-		members       <- which(pjhat_j[,j] == 1)
-		clusters[[j]] <- if (length(members) > 0) {
-			L <- t(chol(P[xj(members),xj(members)]))
-			d <- cluster_redundancy(
-				L, Hm[members]
-			)
-			list(members=members, L=L, d=d, class='cluster')
-		} else empty_cluster()
+	clusters <- sscs$clusters
+	if (njhat > 1) {
+		clusters <- vector('list', njhat)
+		for (j in 1:njhat) {
+			members       <- which(pjhat_j[,j] == 1)
+			clusters[[j]] <- if (length(members) > 0) {
+				L <- t(chol(P[xj(members),xj(members)]))
+				d <- cluster_redundancy(
+					L, Hm[members]
+				)
+				list(members = members,
+				     L       = L,
+				     d       = d,
+				     class   = 'cluster'
+				)
+			} else empty_cluster()
+		}
 	}
 
 	revise(sscs, njhat, pjhat_j, pjhat, clusters)

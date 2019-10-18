@@ -8,6 +8,6 @@ Maintainer: Colin Twomey <crtwomey@gmail.com>
 Description: Finds the maximally compressible components of a system.
 License: GPL-3
 Depends: R (>= 3.5)
-Imports: Rcpp, methods, RcppEigen
+Imports: Rcpp, methods, RcppEigen, Matrix
 LinkingTo: Rcpp, RcppEigen
 LazyData: true
