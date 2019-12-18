@@ -15,8 +15,7 @@ from the commandline, cd to the parent directory of the sscs repository and run
 
 ```console
 $ R CMD build sscs
-$ R CMD check sscs
-$ R CMD install sscs
+$ R CMD install sscs_0.1.tar.gz
 ```
 
 ### Usage

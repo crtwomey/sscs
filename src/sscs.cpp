@@ -23,11 +23,11 @@
 #define EIGEN_USE_BLAS
 #define EIGEN_USE_LAPACKE
 
-// [[Rcpp:depends(RcppEigen)]]
-#include <RcppEigen.h>
-
 #include <Rcpp.h>
 using namespace Rcpp;
+
+// [[Rcpp:depends(RcppEigen)]]
+#include <RcppEigen.h>
 
 /*
  *  Eigen provides a means for updating a Cholesky decomposition generated
